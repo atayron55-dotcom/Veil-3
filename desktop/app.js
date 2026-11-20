@@ -8,6 +8,8 @@ const STUN_SERVERS = [
   { urls: 'stun:stun.cloudflare.com:3478' }
 ];
 const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+// The rendezvous service requires a device id of 8..64 characters ([A-Za-z0-9-]).
+const DEVICE_ID_PATTERN = /^[A-Za-z0-9-]{8,64}$/;
 const DB_NAME = 'veil-p2p';
 const DB_VERSION = 2;
 const DEFAULT_NAME = 'New connection';
@@ -1844,7 +1846,14 @@ async function initialise() {
   settings = await window.veilDesktop.getSettings();
   localProfile = await getProfile('local');
   if (!localProfile) {
-    localProfile = { id: 'local', name: 'You', avatar: null, createdAt: Date.now() };
+    // The device id is sent to the rendezvous service in every "meet" handshake; it must satisfy
+    // the service's DEVICE_PATTERN (8..64 chars of [A-Za-z0-9-]), otherwise every link creation
+    // or join is rejected with "Invalid session code".
+    localProfile = { id: uid(), name: 'You', avatar: null, createdAt: Date.now() };
+    await putProfile(localProfile);
+  } else if (!DEVICE_ID_PATTERN.test(String(localProfile.id || ''))) {
+    // Repair profiles created by older builds that used a too-short device id.
+    localProfile = { ...localProfile, id: uid() };
     await putProfile(localProfile);
   }
 
