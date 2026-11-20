@@ -27,7 +27,11 @@ const SECRET_PATTERN = /^[A-HJ-NP-Z2-9]{24}$/;
 // Visible, backup-friendly folder holding the profile, avatar and emojis.
 const ACCOUNT_DIR = path.join(app.getPath('userData'), 'account');
 const ACCOUNT_JSON = new Set(['profiles', 'emojis']);
-const ACCOUNT_FILE = /^(avatars\/(local|remote-[a-z0-9]{10})|emojis\/[a-z0-9_-]{1,24})\.(png|jpg)$/;
+// A profile is stored under its id. The local profile's id is the fixed key 'local', but
+// earlier builds briefly used a generated UUID as the local profile id, so those legacy
+// avatar file names must remain addressable to allow reading (and cleaning up) old data.
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const ACCOUNT_FILE = new RegExp('^(avatars/(local|remote-[a-z0-9]{10}|' + UUID_RE.source + ')|emojis/[a-z0-9_-]{1,24})\\.(png|jpg)$');
 const MAX_ACCOUNT_FILE = 6 * 1024 * 1024;
 
 let mainWindow;

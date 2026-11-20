@@ -1844,18 +1844,22 @@ async function initialise() {
   try { await navigator.storage?.persist?.(); } catch { /* optional */ }
   db = await openDatabase();
   settings = await window.veilDesktop.getSettings();
-  localProfile = await getProfile('local') || { name: 'You', avatar: null, createdAt: Date.now() };
+  const savedProfile = await getProfile('local');
+  localProfile = savedProfile || { name: 'You', avatar: null, createdAt: Date.now() };
   // The device id sent to the rendezvous service in every "meet" handshake must satisfy the
   // service's DEVICE_PATTERN (8..64 chars of [A-Za-z0-9-]), otherwise every link creation or
   // join is rejected with "Invalid session code". Older builds used the storage key 'local'
   // itself (only 5 characters), so keep a dedicated deviceId and repair it on startup when it
   // is missing or invalid. The profile stays stored under the fixed 'local' key so the UI,
   // avatars and message ownership keep working.
-  if (!DEVICE_ID_PATTERN.test(String(localProfile.deviceId || ''))) {
-    localProfile = { ...localProfile, deviceId: uid() };
-  }
+  const needsRepair = !savedProfile || !DEVICE_ID_PATTERN.test(String(savedProfile.deviceId || ''));
   localProfile.id = 'local';
-  await putProfile(localProfile);
+  if (needsRepair) {
+    localProfile.deviceId = uid();
+    // Saving rewrites the avatar file through the restricted account-file bridge; only do it
+    // when there is actually something to repair, so a normal start-up performs no disk writes.
+    await putProfile(localProfile);
+  }
 
   const pairings = await window.veilDesktop.listPairings();
   await migrateLegacyMessages(pairings);
