@@ -469,7 +469,7 @@ function connectSignal(session) {
     const socket = new WebSocket(url.toString());
     session.signalSocket = socket;
     socket.addEventListener('open', () => {
-      socket.send(JSON.stringify({ type: 'meet', room: session.room, proof: session.proof, device: localProfile.id }));
+      socket.send(JSON.stringify({ type: 'meet', room: session.room, proof: session.proof, device: localProfile.deviceId || localProfile.id }));
       keepAlive = setInterval(() => {
         if (socket.readyState === WebSocket.OPEN) socket.send('{"type":"ping"}');
       }, 25000);
@@ -1844,16 +1844,20 @@ async function initialise() {
   try { await navigator.storage?.persist?.(); } catch { /* optional */ }
   db = await openDatabase();
   settings = await window.veilDesktop.getSettings();
-  localProfile = await getProfile('local');
-  if (!localProfile) {
-    // The device id is sent to the rendezvous service in every "meet" handshake; it must satisfy
-    // the service's DEVICE_PATTERN (8..64 chars of [A-Za-z0-9-]), otherwise every link creation
-    // or join is rejected with "Invalid session code".
-    localProfile = { id: uid(), name: 'You', avatar: null, createdAt: Date.now() };
-    await putProfile(localProfile);
-  } else if (!DEVICE_ID_PATTERN.test(String(localProfile.id || ''))) {
-    // Repair profiles created by older builds that used a too-short device id.
-    localProfile = { ...localProfile, id: uid() };
+  const savedProfile = await getProfile('local');
+  localProfile = savedProfile || { name: 'You', avatar: null, createdAt: Date.now() };
+  // The device id sent to the rendezvous service in every "meet" handshake must satisfy the
+  // service's DEVICE_PATTERN (8..64 chars of [A-Za-z0-9-]), otherwise every link creation or
+  // join is rejected with "Invalid session code". Older builds used the storage key 'local'
+  // itself (only 5 characters), so keep a dedicated deviceId and repair it on startup when it
+  // is missing or invalid. The profile stays stored under the fixed 'local' key so the UI,
+  // avatars and message ownership keep working.
+  const needsRepair = !savedProfile || !DEVICE_ID_PATTERN.test(String(savedProfile.deviceId || ''));
+  localProfile.id = 'local';
+  if (needsRepair) {
+    localProfile.deviceId = uid();
+    // Saving rewrites the avatar file through the restricted account-file bridge; only do it
+    // when there is actually something to repair, so a normal start-up performs no disk writes.
     await putProfile(localProfile);
   }
 
